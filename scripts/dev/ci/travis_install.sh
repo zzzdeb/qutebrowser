@@ -18,6 +18,14 @@
 # You should have received a copy of the GNU General Public License
 # along with qutebrowser.  If not, see <http://www.gnu.org/licenses/>.
 
+py3() {
+    if [[ $TRAVIS_OS_NAME == windows ]]; then
+        py -3 "$@"
+    else
+        python3 "$@"
+    fi
+}
+
 # Stolen from https://github.com/travis-ci/travis-build/blob/master/lib/travis/build/templates/header.sh
 # and adjusted to use ((...))
 travis_retry() {
@@ -44,7 +52,7 @@ travis_retry() {
 }
 
 pip_install() {
-    travis_retry python3 -m pip install "$@"
+    travis_retry py3 -m pip install "$@"
 }
 
 npm_install() {
@@ -54,7 +62,7 @@ npm_install() {
 }
 
 check_pyqt() {
-    python3 <<EOF
+    py3 <<EOF
 import sys
 from PyQt5.QtCore import QT_VERSION_STR, PYQT_VERSION_STR, qVersion
 try:
@@ -86,7 +94,7 @@ elif [[ $TRAVIS_OS_NAME == osx ]]; then
     brew install qt5 pyqt5
 
     pip_install -r misc/requirements/requirements-tox.txt
-    python3 -m pip --version
+    py3 -m pip --version
     tox --version
     check_pyqt
     exit 0
