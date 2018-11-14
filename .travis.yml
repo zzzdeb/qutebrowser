@@ -6,7 +6,7 @@ python: 3.6
 matrix:
   include:
     - os: windows
-      language: generic
+      language: shell
       env: TESTENV=py37-pyqt511
   fast_finish: true
   allow_failures:
