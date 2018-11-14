@@ -90,6 +90,8 @@ elif [[ $TRAVIS_OS_NAME == osx ]]; then
     tox --version
     check_pyqt
     exit 0
+elif [[ $TRAVIS_OS_NAME == windows ]]; then
+    python -m ensurepip
 fi
 
 case $TESTENV in
