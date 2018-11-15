@@ -98,6 +98,8 @@ elif [[ $TRAVIS_OS_NAME == osx ]]; then
     tox --version
     check_pyqt
     exit 0
+elif [[ $TRAVIS_OS_NAME == windows ]]; then
+    choco install python3
 fi
 
 case $TESTENV in
