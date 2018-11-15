@@ -20,7 +20,7 @@
 
 py3() {
     if [[ $TRAVIS_OS_NAME == windows ]]; then
-        py -3 "$@"
+        python "$@"
     else
         python3 "$@"
     fi
