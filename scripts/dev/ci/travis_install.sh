@@ -19,11 +19,7 @@
 # along with qutebrowser.  If not, see <http://www.gnu.org/licenses/>.
 
 py3() {
-    if [[ $TRAVIS_OS_NAME == windows ]]; then
-        python "$@"
-    else
-        python3 "$@"
-    fi
+    python3 "$@"
 }
 
 # Stolen from https://github.com/travis-ci/travis-build/blob/master/lib/travis/build/templates/header.sh
