@@ -95,7 +95,7 @@ elif [[ $TRAVIS_OS_NAME == osx ]]; then
 
     pip_install -r misc/requirements/requirements-tox.txt
     py3 -m pip --version
-    tox --version
+    py3 -m tox --version
     check_pyqt
     exit 0
 elif [[ $TRAVIS_OS_NAME == windows ]]; then
