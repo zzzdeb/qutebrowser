@@ -27,6 +27,7 @@ elif [[ $TESTENV == shellcheck ]]; then
 else
     args=()
     [[ $TRAVIS_OS_NAME == osx ]] && args=('--qute-bdd-webengine' '--no-xvfb' 'tests/unit')
+    [[ $TRAVIS_OS_NAME == windows ]] && export PATH="$PATH;C:\\Python37\\Scripts"
 
     # WORKAROUND for unknown crash inside swrast_dri.so
     # See https://github.com/qutebrowser/qutebrowser/pull/4218#issuecomment-421931770
