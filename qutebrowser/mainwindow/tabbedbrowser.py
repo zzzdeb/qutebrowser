@@ -763,9 +763,10 @@ class TabbedBrowser(QWidget):
             del tab_queue[:tab_queue_ind]
             objreg.register('tab-queue-ind', 0, update=True, scope='window', window=self._win_id)
             tab_queue_ind = 0
-
-        if tab_queue_ind == 0:
             tab_queue.insert(0, tab)
+
+            if len(tab_queue)>10:
+                tab_queue.pop()
 
     @pyqtSlot()
     def on_cmd_return_pressed(self):

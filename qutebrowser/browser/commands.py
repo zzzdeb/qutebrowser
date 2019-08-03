@@ -172,7 +172,10 @@ class CommandDispatcher:
         self._set_current_index(idx)
 
     def _tab_focus_queue(self, delta, *, show_error=True):
-        """Select the tab which was previously focused."""
+        """Select the tab from queue by delta."""
+        if not delta:
+            return
+
         try:
             q_ind = objreg.get('tab-queue-ind', scope='window',
                              window=self._win_id)
@@ -187,16 +190,26 @@ class CommandDispatcher:
             if not show_error:
                 return
             raise cmdutils.CommandError("no tab-queue!")
-        q_ind = q_ind + delta
-        if q_ind<0 or q_ind>=len(queue):
+        new_q_ind = q_ind + delta
+        if new_q_ind<0 or new_q_ind>=len(queue):
             return
+        #  print(q_ind)
 
-        objreg.register('tab-queue-ind', q_ind, update=True, scope='window', window=self._win_id)
-        tab = queue[q_ind]
-        t_ind = self._tabbed_browser.widget.indexOf(tab)
+        tab = queue[new_q_ind]
+        try:
+            t_ind = self._tabbed_browser.widget.indexOf(tab)
+        except RuntimeError as e:
+            # The tab has been deleted already
+            queue.pop(new_q_ind)
+            # shift by 1
+            if delta<0:
+                objreg.register('tab-queue-ind', q_ind-1, update=True, scope='window', window=self._win_id)
+            return
+        objreg.register('tab-queue-ind', new_q_ind, update=True, scope='window', window=self._win_id)
         objreg.register('tab-queue-edit', False, update=True, scope='window', window=self._win_id)
         self._set_current_index(t_ind)
         objreg.register('tab-queue-edit', True, update=True, scope='window', window=self._win_id)
+
 
     def _get_selection_override(self, prev, next_, opposite):
         """Helper function for tab_close to get the tab to select.
