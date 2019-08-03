@@ -171,6 +171,33 @@ class CommandDispatcher:
             raise cmdutils.CommandError("Last focused tab vanished!")
         self._set_current_index(idx)
 
+    def _tab_focus_queue(self, delta, *, show_error=True):
+        """Select the tab which was previously focused."""
+        try:
+            q_ind = objreg.get('tab-queue-ind', scope='window',
+                             window=self._win_id)
+        except KeyError:
+            if not show_error:
+                return
+            raise cmdutils.CommandError("no last-queue-ind")
+        try:
+            queue = objreg.get('tab-queue', scope='window',
+                             window=self._win_id)
+        except KeyError:
+            if not show_error:
+                return
+            raise cmdutils.CommandError("no tab-queue!")
+        q_ind = q_ind + delta
+        if q_ind<0 or q_ind>=len(queue):
+            return
+
+        objreg.register('tab-queue-ind', q_ind, update=True, scope='window', window=self._win_id)
+        tab = queue[q_ind]
+        t_ind = self._tabbed_browser.widget.indexOf(tab)
+        objreg.register('tab-queue-edit', False, update=True, scope='window', window=self._win_id)
+        self._set_current_index(t_ind)
+        objreg.register('tab-queue-edit', True, update=True, scope='window', window=self._win_id)
+
     def _get_selection_override(self, prev, next_, opposite):
         """Helper function for tab_close to get the tab to select.
 
@@ -890,7 +917,7 @@ class CommandDispatcher:
         tabbed_browser.widget.setCurrentWidget(tab)
 
     @cmdutils.register(instance='command-dispatcher', scope='window')
-    @cmdutils.argument('index', choices=['last'])
+    @cmdutils.argument('index', choices=['last', 'queue_next', 'queue_prev'])
     @cmdutils.argument('count', value=cmdutils.Value.count)
     def tab_focus(self, index: typing.Union[str, int] = None,
                   count: int = None, no_last: bool = False) -> None:
@@ -911,6 +938,14 @@ class CommandDispatcher:
 
         if index == 'last':
             self._tab_focus_last()
+            return
+        elif index == 'queue_next':
+            delta = -1 if count is None else count
+            self._tab_focus_queue(delta)
+            return
+        elif index == 'queue_prev':
+            delta = 1 if count is None else count
+            self._tab_focus_queue(delta)
             return
         elif index is None:
             self.tab_next()

@@ -254,6 +254,10 @@ class MainWindow(QWidget):
         self.state_before_fullscreen = self.windowState()
         config.set_register_stylesheet(self)
 
+        objreg.register('tab-queue', [], scope='window', window=self.win_id)
+        objreg.register('tab-queue-ind', 0, scope='window', window=self.win_id)
+        objreg.register('tab-queue-edit', True, scope='window', window=self.win_id)
+
     def _init_geometry(self, geometry):
         """Initialize the window geometry or load it from disk."""
         if geometry is not None:

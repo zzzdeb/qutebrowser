@@ -756,6 +756,17 @@ class TabbedBrowser(QWidget):
         self._tab_insert_idx_left = self.widget.currentIndex()
         self._tab_insert_idx_right = self.widget.currentIndex() + 1
 
+        tab_queue_ind = objreg.get('tab-queue-ind', scope='window', window=self._win_id)
+        tab_queue = objreg.get('tab-queue', scope='window', window=self._win_id)
+
+        if objreg.get('tab-queue-edit', scope='window', window=self._win_id):
+            del tab_queue[:tab_queue_ind]
+            objreg.register('tab-queue-ind', 0, update=True, scope='window', window=self._win_id)
+            tab_queue_ind = 0
+
+        if tab_queue_ind == 0:
+            tab_queue.insert(0, tab)
+
     @pyqtSlot()
     def on_cmd_return_pressed(self):
         """Set focus when the commandline closes."""
