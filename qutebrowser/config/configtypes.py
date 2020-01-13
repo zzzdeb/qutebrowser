@@ -1,6 +1,6 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2014-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2014-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 #
 # This file is part of qutebrowser.
 #
@@ -56,8 +56,8 @@ import typing
 import attr
 import yaml
 from PyQt5.QtCore import QUrl, Qt
-from PyQt5.QtGui import QColor, QFont
-from PyQt5.QtWidgets import QTabWidget, QTabBar
+from PyQt5.QtGui import QColor, QFont, QFontDatabase
+from PyQt5.QtWidgets import QTabWidget, QTabBar, QApplication
 from PyQt5.QtNetwork import QNetworkProxy
 
 from qutebrowser.misc import objects, debugcachestats
@@ -80,8 +80,8 @@ BOOLEAN_STATES = {'1': True, 'yes': True, 'true': True, 'on': True,
 
 
 _Completions = typing.Optional[typing.Iterable[typing.Tuple[str, str]]]
-_StrUnset = typing.Union[str, configutils.Unset]
-_StrUnsetNone = typing.Union[None, str, configutils.Unset]
+_StrUnset = typing.Union[str, usertypes.Unset]
+_StrUnsetNone = typing.Union[None, str, usertypes.Unset]
 
 
 class ValidValues:
@@ -168,7 +168,7 @@ class BaseType:
             value: The value to check.
             pytype: A Python type to check the value against.
         """
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return
 
         if (value is None or (pytype == list and value == []) or
@@ -342,7 +342,7 @@ class MappingType(BaseType):
 
     def to_py(self, value: typing.Any) -> typing.Any:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -408,7 +408,7 @@ class String(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -450,7 +450,7 @@ class UniqueCharString(String):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         py_value = super().to_py(value)
-        if isinstance(py_value, configutils.Unset):
+        if isinstance(py_value, usertypes.Unset):
             return py_value
         elif not py_value:
             return None
@@ -510,10 +510,10 @@ class List(BaseType):
 
     def to_py(
             self,
-            value: typing.Union[typing.List, configutils.Unset]
-    ) -> typing.Union[typing.List, configutils.Unset]:
+            value: typing.Union[typing.List, usertypes.Unset]
+    ) -> typing.Union[typing.List, usertypes.Unset]:
         self._basic_py_validation(value, list)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return []
@@ -601,7 +601,7 @@ class ListOrValue(BaseType):
         return value
 
     def to_py(self, value: typing.Any) -> typing.Any:
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
 
         try:
@@ -652,10 +652,10 @@ class FlagList(List):
 
     def to_py(
             self,
-            value: typing.Union[configutils.Unset, typing.List],
-    ) -> typing.Union[configutils.Unset, typing.List]:
+            value: typing.Union[usertypes.Unset, typing.List],
+    ) -> typing.Union[usertypes.Unset, typing.List]:
         vals = super().to_py(value)
-        if not isinstance(vals, configutils.Unset):
+        if not isinstance(vals, usertypes.Unset):
             self._check_duplicates(vals)
         return vals
 
@@ -866,10 +866,10 @@ class Perc(_Numeric):
 
     def to_py(
             self,
-            value: typing.Union[None, float, int, str, configutils.Unset]
-    ) -> typing.Union[None, float, int, configutils.Unset]:
+            value: typing.Union[None, float, int, str, usertypes.Unset]
+    ) -> typing.Union[None, float, int, usertypes.Unset]:
         self._basic_py_validation(value, (float, int, str))
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1062,10 +1062,10 @@ class QtColor(BaseType):
         except ValueError:
             raise configexc.ValidationError(val, "must be a valid color value")
 
-    def to_py(self, value: _StrUnset) -> typing.Union[configutils.Unset,
+    def to_py(self, value: _StrUnset) -> typing.Union[usertypes.Unset,
                                                       None, QColor]:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1123,7 +1123,7 @@ class QssColor(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1151,7 +1151,7 @@ class Font(BaseType):
     """
 
     # Gets set when the config is initialized.
-    monospace_fonts = None  # type: str
+    default_family = None  # type: str
     font_regex = re.compile(r"""
         (
             (
@@ -1168,9 +1168,62 @@ class Font(BaseType):
         )*               # 0-inf size/weight/style tags
         (?P<family>.+)  # mandatory font family""", re.VERBOSE)
 
+    @classmethod
+    def set_default_family(cls, default_family: typing.List[str]) -> None:
+        """Make sure default_family fonts are available.
+
+        If the given value (fonts.default_family in the config) is unset, a
+        system-specific default monospace font is used.
+
+        Note that (at least) three ways of getting the default monospace font
+        exist:
+
+        1) f = QFont()
+           f.setStyleHint(QFont.Monospace)
+           print(f.defaultFamily())
+
+        2) f = QFont()
+           f.setStyleHint(QFont.TypeWriter)
+           print(f.defaultFamily())
+
+        3) f = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+           print(f.family())
+
+        They yield different results depending on the OS:
+
+                   QFont.Monospace  | QFont.TypeWriter    | QFontDatabase
+                   ------------------------------------------------------
+        Windows:   Courier New      | Courier New         | Courier New
+        Linux:     DejaVu Sans Mono | DejaVu Sans Mono    | monospace
+        macOS:     Menlo            | American Typewriter | Monaco
+
+        Test script: https://p.cmpl.cc/d4dfe573
+
+        On Linux, it seems like both actually resolve to the same font.
+
+        On macOS, "American Typewriter" looks like it indeed tries to imitate a
+        typewriter, so it's not really a suitable UI font.
+
+        Looking at those Wikipedia articles:
+
+        https://en.wikipedia.org/wiki/Monaco_(typeface)
+        https://en.wikipedia.org/wiki/Menlo_(typeface)
+
+        the "right" choice isn't really obvious. Thus, let's go for the
+        QFontDatabase approach here, since it's by far the simplest one.
+        """
+        if default_family:
+            families = configutils.FontFamilies(default_family)
+        else:
+            assert QApplication.instance() is not None
+            font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+            families = configutils.FontFamilies([font.family()])
+
+        cls.default_family = families.to_str(quote=True)
+
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1180,8 +1233,9 @@ class Font(BaseType):
             # as family.
             raise configexc.ValidationError(value, "must be a valid font")
 
-        if value.endswith(' monospace') and self.monospace_fonts is not None:
-            return value.replace('monospace', self.monospace_fonts)
+        if (value.endswith(' default_family') and
+                self.default_family is not None):
+            return value.replace('default_family', self.default_family)
         return value
 
 
@@ -1191,7 +1245,7 @@ class FontFamily(Font):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1215,23 +1269,20 @@ class QtFont(Font):
 
     __doc__ = Font.__doc__  # for src2asciidoc.py
 
-    def to_py(self, value: _StrUnset) -> typing.Union[configutils.Unset,
+    def _parse_families(self, family_str: str) -> configutils.FontFamilies:
+        if family_str == 'default_family' and self.default_family is not None:
+            family_str = self.default_family
+
+        return configutils.FontFamilies.from_str(family_str)
+
+    def to_py(self, value: _StrUnset) -> typing.Union[usertypes.Unset,
                                                       None, QFont]:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
 
-        style_map = {
-            'normal': QFont.StyleNormal,
-            'italic': QFont.StyleItalic,
-            'oblique': QFont.StyleOblique,
-        }
-        weight_map = {
-            'normal': QFont.Normal,
-            'bold': QFont.Bold,
-        }
         font = QFont()
         font.setStyle(QFont.StyleNormal)
         font.setWeight(QFont.Normal)
@@ -1246,14 +1297,26 @@ class QtFont(Font):
         weight = match.group('weight')
         namedweight = match.group('namedweight')
         size = match.group('size')
-        family = match.group('family')
+        family_str = match.group('family')
+
+        style_map = {
+            'normal': QFont.StyleNormal,
+            'italic': QFont.StyleItalic,
+            'oblique': QFont.StyleOblique,
+        }
         if style:
             font.setStyle(style_map[style])
+
+        weight_map = {
+            'normal': QFont.Normal,
+            'bold': QFont.Bold,
+        }
         if namedweight:
             font.setWeight(weight_map[namedweight])
-        if weight:
+        elif weight:
             # based on qcssparser.cpp:setFontWeightFromValue
             font.setWeight(min(int(weight) // 8, 99))
+
         if size:
             if size.lower().endswith('pt'):
                 font.setPointSizeF(float(size[:-2]))
@@ -1265,14 +1328,13 @@ class QtFont(Font):
                 raise ValueError("Unexpected size unit in {!r}!".format(
                     size))  # pragma: no cover
 
-        if family == 'monospace' and self.monospace_fonts is not None:
-            family = self.monospace_fonts
-        # The Qt CSS parser handles " and ' before passing the string to
-        # QFont.setFamily. We could do proper CSS-like parsing here, but since
-        # hopefully nobody will ever have a font with quotes in the family (if
-        # that's even possible), we take a much more naive approach.
-        family = family.replace('"', '').replace("'", '')
-        font.setFamily(family)
+        families = self._parse_families(family_str)
+        if hasattr(font, 'setFamilies'):
+            # Added in Qt 5.13
+            font.setFamily(families.family)  # type: ignore
+            font.setFamilies(list(families))
+        else:  # pragma: no cover
+            font.setFamily(families.to_str(quote=False))
 
         return font
 
@@ -1333,11 +1395,11 @@ class Regex(BaseType):
 
     def to_py(
             self,
-            value: typing.Union[str, typing.Pattern[str], configutils.Unset]
-    ) -> typing.Union[configutils.Unset, None, typing.Pattern[str]]:
+            value: typing.Union[str, typing.Pattern[str], usertypes.Unset]
+    ) -> typing.Union[usertypes.Unset, None, typing.Pattern[str]]:
         """Get a compiled regex from either a string or a regex object."""
         self._basic_py_validation(value, (str, self._regex_type))
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1425,10 +1487,10 @@ class Dict(BaseType):
 
     def to_py(
             self,
-            value: typing.Union[typing.Dict, configutils.Unset, None]
-    ) -> typing.Union[typing.Dict, configutils.Unset]:
+            value: typing.Union[typing.Dict, usertypes.Unset, None]
+    ) -> typing.Union[typing.Dict, usertypes.Unset]:
         self._basic_py_validation(value, dict)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return self._fill_fixed_keys({})
@@ -1477,7 +1539,7 @@ class File(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1509,7 +1571,7 @@ class Directory(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1530,16 +1592,23 @@ class Directory(BaseType):
 
 class FormatString(BaseType):
 
-    """A string with placeholders."""
+    """A string with placeholders.
+
+    Attributes:
+        fields: Which replacements are allowed in the format string.
+        completions: completions to be used, or None
+    """
 
     def __init__(self, fields: typing.Iterable[str],
-                 none_ok: bool = False) -> None:
+                 none_ok: bool = False,
+                 completions: _Completions = None) -> None:
         super().__init__(none_ok)
         self.fields = fields
+        self._completions = completions
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1553,6 +1622,12 @@ class FormatString(BaseType):
             raise configexc.ValidationError(value, str(e))
 
         return value
+
+    def complete(self) -> _Completions:
+        if self._completions is not None:
+            return self._completions
+        else:
+            return super().complete()
 
     def __repr__(self) -> str:
         return utils.get_repr(self, none_ok=self.none_ok, fields=self.fields)
@@ -1577,10 +1652,10 @@ class ShellCommand(List):
 
     def to_py(
             self,
-            value: typing.Union[typing.List, configutils.Unset],
-    ) -> typing.Union[typing.List, configutils.Unset]:
+            value: typing.Union[typing.List, usertypes.Unset],
+    ) -> typing.Union[typing.List, usertypes.Unset]:
         py_value = super().to_py(value)
-        if isinstance(py_value, configutils.Unset):
+        if isinstance(py_value, usertypes.Unset):
             return py_value
         elif not py_value:
             return []
@@ -1611,9 +1686,9 @@ class Proxy(BaseType):
     def to_py(
             self,
             value: _StrUnset
-    ) -> typing.Union[configutils.Unset, None, QNetworkProxy, _SystemProxy]:
+    ) -> typing.Union[usertypes.Unset, None, QNetworkProxy, _SystemProxy]:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1653,7 +1728,7 @@ class SearchEngineUrl(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1683,7 +1758,7 @@ class FuzzyUrl(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1719,10 +1794,10 @@ class Padding(Dict):
 
     def to_py(  # type: ignore
             self,
-            value: typing.Union[configutils.Unset, typing.Dict, None],
-    ) -> typing.Union[configutils.Unset, PaddingValues]:
+            value: typing.Union[usertypes.Unset, typing.Dict, None],
+    ) -> typing.Union[usertypes.Unset, PaddingValues]:
         d = super().to_py(value)
-        if isinstance(d, configutils.Unset):
+        if isinstance(d, usertypes.Unset):
             return d
 
         return PaddingValues(**d)
@@ -1734,7 +1809,7 @@ class Encoding(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1794,9 +1869,9 @@ class Url(BaseType):
     def to_py(
             self,
             value: _StrUnset
-    ) -> typing.Union[configutils.Unset, None, QUrl]:
+    ) -> typing.Union[usertypes.Unset, None, QUrl]:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1814,7 +1889,7 @@ class SessionName(BaseType):
 
     def to_py(self, value: _StrUnset) -> _StrUnsetNone:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1864,10 +1939,10 @@ class ConfirmQuit(FlagList):
 
     def to_py(
             self,
-            value: typing.Union[configutils.Unset, typing.List],
-    ) -> typing.Union[typing.List, configutils.Unset]:
+            value: typing.Union[usertypes.Unset, typing.List],
+    ) -> typing.Union[typing.List, usertypes.Unset]:
         values = super().to_py(value)
-        if isinstance(values, configutils.Unset):
+        if isinstance(values, usertypes.Unset):
             return values
         elif not values:
             return []
@@ -1908,9 +1983,9 @@ class Key(BaseType):
     def to_py(
             self,
             value: _StrUnset
-    ) -> typing.Union[configutils.Unset, None, keyutils.KeySequence]:
+    ) -> typing.Union[usertypes.Unset, None, keyutils.KeySequence]:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None
@@ -1932,9 +2007,9 @@ class UrlPattern(BaseType):
     def to_py(
             self,
             value: _StrUnset
-    ) -> typing.Union[configutils.Unset, None, urlmatch.UrlPattern]:
+    ) -> typing.Union[usertypes.Unset, None, urlmatch.UrlPattern]:
         self._basic_py_validation(value, str)
-        if isinstance(value, configutils.Unset):
+        if isinstance(value, usertypes.Unset):
             return value
         elif not value:
             return None

@@ -1,6 +1,6 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2017-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2017-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 #
 # This file is part of qutebrowser.
 #
@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import QMessageBox
 
 from qutebrowser.api import config as configapi
 from qutebrowser.config import (config, configdata, configfiles, configtypes,
-                                configexc, configcommands)
+                                configexc, configcommands, stylesheet)
 from qutebrowser.utils import (objreg, usertypes, log, standarddir, message,
                                qtutils)
 from qutebrowser.config import configcache
@@ -85,8 +85,7 @@ def early_init(args: argparse.Namespace) -> None:
     objects.backend = get_backend(args)
     objects.debug_flags = set(args.debug_flags)
 
-    configtypes.Font.monospace_fonts = config.val.fonts.monospace
-    config.instance.changed.connect(_update_monospace_fonts)
+    stylesheet.init()
 
     _init_envvars()
 
@@ -104,6 +103,8 @@ def _init_envvars() -> None:
 
     if config.val.qt.force_platform is not None:
         os.environ['QT_QPA_PLATFORM'] = config.val.qt.force_platform
+    if config.val.qt.force_platformtheme is not None:
+        os.environ['QT_QPA_PLATFORMTHEME'] = config.val.qt.force_platformtheme
 
     if config.val.window.hide_decoration:
         os.environ['QT_WAYLAND_DISABLE_WINDOWDECORATION'] = '1'
@@ -115,18 +116,16 @@ def _init_envvars() -> None:
         os.environ[env_var] = '1'
 
 
-@config.change_filter('fonts.monospace', function=True)
-def _update_monospace_fonts() -> None:
-    """Update all fonts if fonts.monospace was set."""
-    configtypes.Font.monospace_fonts = config.val.fonts.monospace
+@config.change_filter('fonts.default_family', function=True)
+def _update_font_default_family() -> None:
+    """Update all fonts if fonts.default_family was set."""
+    configtypes.Font.set_default_family(config.val.fonts.default_family)
     for name, opt in configdata.DATA.items():
-        if name == 'fonts.monospace':
-            continue
-        elif not isinstance(opt.typ, configtypes.Font):
+        if not isinstance(opt.typ, configtypes.Font):
             continue
 
         value = config.instance.get_obj(name)
-        if value is None or not value.endswith(' monospace'):
+        if value is None or not value.endswith(' default_family'):
             continue
 
         config.instance.changed.emit(name)
@@ -160,6 +159,9 @@ def late_init(save_manager: savemanager.SaveManager) -> None:
             sys.exit(usertypes.Exit.err_init)
 
     _init_errors = None
+
+    configtypes.Font.set_default_family(config.val.fonts.default_family)
+    config.instance.changed.connect(_update_font_default_family)
 
     config.instance.init_save_manager(save_manager)
     configfiles.state.init_save_manager(save_manager)
@@ -261,6 +263,12 @@ def _qtwebengine_args(namespace: argparse.Namespace) -> typing.Iterator[str]:
         settings['content.autoplay'] = {
             True: None,
             False: '--autoplay-policy=user-gesture-required',
+        }
+
+    if qtutils.version_check('5.14'):
+        settings['colors.webpage.force_dark_color_scheme'] = {
+            True: '--force-dark-mode',
+            False: None,
         }
 
     for setting, args in sorted(settings.items()):

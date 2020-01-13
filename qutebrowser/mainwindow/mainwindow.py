@@ -1,6 +1,6 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2014-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2014-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 #
 # This file is part of qutebrowser.
 #
@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication, QSizePolicy
 
 from qutebrowser.commands import runners
 from qutebrowser.api import cmdutils
-from qutebrowser.config import config, configfiles
+from qutebrowser.config import config, configfiles, stylesheet
 from qutebrowser.utils import (message, log, usertypes, qtutils, objreg, utils,
                                jinja, debug)
 from qutebrowser.mainwindow import messageview, prompt
@@ -160,6 +160,27 @@ class MainWindow(QWidget):
             padding-left: 3px;
             padding-right: 3px;
         }
+
+        QMenu {
+            {% if conf.fonts.contextmenu %}
+                font: {{ conf.fonts.contextmenu }};
+            {% endif %}
+            {% if conf.colors.contextmenu.menu.bg %}
+                background-color: {{ conf.colors.contextmenu.menu.bg }};
+            {% endif %}
+            {% if conf.colors.contextmenu.menu.fg %}
+                color: {{ conf.colors.contextmenu.menu.fg }};
+            {% endif %}
+        }
+
+        QMenu::item:selected {
+            {% if conf.colors.contextmenu.selected.bg %}
+                background-color: {{ conf.colors.contextmenu.selected.bg }};
+            {% endif %}
+            {% if conf.colors.contextmenu.selected.fg %}
+                color: {{ conf.colors.contextmenu.selected.fg }};
+            {% endif %}
+        }
     """
 
     def __init__(self, *, private, geometry=None, parent=None):
@@ -257,7 +278,7 @@ class MainWindow(QWidget):
         self._set_decoration(config.val.window.hide_decoration)
 
         self.state_before_fullscreen = self.windowState()
-        config.set_register_stylesheet(self)
+        stylesheet.set_register(self)
 
         objreg.register('tab-queue', [], scope='window', window=self.win_id)
         objreg.register('tab-queue-ind', 0, scope='window', window=self.win_id)
