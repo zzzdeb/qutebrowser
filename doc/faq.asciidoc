@@ -97,7 +97,7 @@ security bugs, please contact me directly at mail@qutebrowser.org, GPG ID
 https://www.the-compiler.org/pubkey.asc[0x916eb0c8fd55a072].
 
 Is there an ad blocker?::
-    There is a simple host-based ad blocker that takes `/etc/hosts`-like lists. 
+    There is a simple host-based ad blocker that takes `/etc/hosts`-like lists.
 +
 More advanced ad blockers can have a big impact on browsing speed and https://blog.mozilla.org/nnethercote/2014/05/14/adblock-pluss-effect-on-firefoxs-memory-usage/[RAM usage], so implementing support for AdBlock Plus-like lists is not a priority.
 How can I get No-Script-like behavior?::
@@ -261,6 +261,62 @@ How do I change the `WM_CLASS` used by qutebrowser windows?::
     with `--qt-arg name foo`. Note that all windows are part of the same
     qutebrowser instance (unless you use `--temp-basedir` or `--basedir`), so
     they all will share the same `WM_CLASS`.
+
+How do I use X.509 Client Certificates?::
+Right now there is no certificate-chooser prompt implemented when there are
+multiple matches. Subscribe to https://github.com/qutebrowser/qutebrowser/issues/4587[Issue#4587]
+for progress notifications.
++
+QtWebEngine will attempt to use certificates stored in `${HOME}/.pki/nssdb`. If
+you have Chromium installed, you can import the certificate there and
+qutebrowser will pick it up as well. Alternatively, you can use the `certutil`
+commandline tool:
++
+Assuming you have a CA Certificate and a
+Client Certificate that you want for authenticating yourself on a web
+service that validates against this CA Certificate, you need to perform
+the following steps.
++
+1. Import the CA Certificate
++
+----
+certutil -D "sql:${HOME}/.pki/nssdb" -A -i <path_to_ca_cert.pem> -n "My Fancy CA" -t "TC,C,T"
+----
++
+2. Merge your `<cert.crt>` and `<privkey.pem>` files into a single `PKCS#12`
+certificate file (optional, skip if your Client Certificate already is in
+`PKCS#12` format)
++
+----
+openssl pkcs12 -export -in <path_to_client_cert.crt> -inkey <path_to_client_cert_privkey.pem> -out my_fancy_client_cert.pkcs12
+----
++
+3. Import your Client Certificate into the certificate store
++
+----
+pk12util -d "sql:${HOME}/.pki/nssdb" -i <path_to_my_fancy_client_cert.pkcs12> -n "My Fancy Client Certificate"
+----
++
+Upon visiting a website that requests a Client Certificate you should now
+be prompted by qutebrowser whether you want to submit the newly imported
+Client Certificate or not.
++
+If you ever need to renew any of these certificates, you can take a look
+at the currently imported certificates using:
++
+----
+certutil -D "sql:${HOME}/.pki/nssdb" -L
+----
++
+Then remove the expired certificates using:
++
+----
+certutil -D "sql:${HOME}/.pki/nssdb" -D -n "My Fancy Certificate Nickname"
+----
++
+And then import the new and valid certificates using the procedure
+described above.
+
 
 == Troubleshooting
 

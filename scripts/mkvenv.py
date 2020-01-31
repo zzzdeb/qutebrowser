@@ -50,11 +50,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--pyqt-version',
                         choices=pyqt_versions(),
                         default='auto',
-                        help="PyQt version to install")
+                        help="PyQt version to install.")
     parser.add_argument('--pyqt-type',
                         choices=['binary', 'source', 'link'],
                         default='binary',
                         help="How to install PyQt/Qt.")
+    parser.add_argument('--virtualenv',
+                        action='store_true',
+                        help="Use virtualenv instead of venv.")
+    parser.add_argument('--asciidoc', help="Full path to python and "
+                        "asciidoc.py. If not given, it's searched in PATH.",
+                        nargs=2, required=False,
+                        metavar=('PYTHON', 'ASCIIDOC'))
     parser.add_argument('--tox-error',
                         action='store_true',
                         help=argparse.SUPPRESS)
@@ -78,7 +85,7 @@ def pyqt_versions() -> typing.List[str]:
 
 
 def run_venv(venv_dir: pathlib.Path, executable, *args: str) -> None:
-    """Runt he given command inside the virtualenv."""
+    """Run the given command inside the virtualenv."""
     subdir = 'Scripts' if os.name == 'nt' else 'bin'
 
     try:
@@ -108,8 +115,9 @@ def show_tox_error(pyqt_type: str) -> None:
         raise AssertionError
 
     print()
-    utils.print_col('tox -e {} is deprecated. Please use scripts/mkvenv.py{} '
-                    'instead.'.format(env, args), 'red')
+    utils.print_col('tox -e {} is deprecated. '
+                    'Please use "python3 scripts/mkvenv.py{}" instead.'
+                    .format(env, args), 'red')
     print()
 
 
@@ -118,8 +126,14 @@ def delete_old_venv(venv_dir: pathlib.Path) -> None:
     if not venv_dir.exists():
         return
 
-    markers = ['.tox-config1', 'pyvenv.cfg']
-    if not any((venv_dir / m).exists() for m in markers):
+    markers = [
+        venv_dir / '.tox-config1',  # tox
+        venv_dir / 'pyvenv.cfg',  # venv
+        venv_dir / 'Scripts',  # Windows
+        venv_dir / 'bin',  # Linux
+    ]
+
+    if not any(m.exists() for m in markers):
         utils.print_col('{} does not look like a virtualenv, '
                         'cowardly refusing to remove it.'.format(venv_dir),
                         'red')
@@ -129,10 +143,19 @@ def delete_old_venv(venv_dir: pathlib.Path) -> None:
     shutil.rmtree(str(venv_dir))
 
 
-def create_venv(venv_dir: pathlib.Path) -> None:
+def create_venv(venv_dir: pathlib.Path, use_virtualenv: bool = False) -> None:
     """Create a new virtualenv."""
-    utils.print_col('$ python3 -m venv {}'.format(venv_dir), 'blue')
-    venv.create(str(venv_dir), with_pip=True)
+    if use_virtualenv:
+        utils.print_col('$ python3 -m virtualenv {}'.format(venv_dir), 'blue')
+        try:
+            subprocess.run([sys.executable, '-m', 'virtualenv', venv_dir],
+                           check=True)
+        except subprocess.CalledProcessError as e:
+            utils.print_col("virtualenv failed, exiting", 'red')
+            sys.exit(e.returncode)
+    else:
+        utils.print_col('$ python3 -m venv {}'.format(venv_dir), 'blue')
+        venv.create(str(venv_dir), with_pip=True)
 
 
 def upgrade_pip(venv_dir: pathlib.Path) -> None:
@@ -184,6 +207,21 @@ def install_qutebrowser(venv_dir: pathlib.Path) -> None:
     pip_install(venv_dir, '-e', str(REPO_ROOT))
 
 
+def regenerate_docs(venv_dir: pathlib.Path,
+                    asciidoc: typing.Optional[typing.Tuple[str, str]]):
+    """Regenerate docs using asciidoc."""
+    utils.print_title("Generating documentation")
+    if asciidoc is not None:
+        a2h_args = ['--asciidoc'] + asciidoc
+    else:
+        a2h_args = []
+    script_path = pathlib.Path(__file__).parent / 'asciidoc2html.py'
+
+    utils.print_col('venv$ python3 scripts/asciidoc2html.py {}'
+                    .format(' '.join(a2h_args)), 'blue')
+    run_venv(venv_dir, 'python3', str(script_path), *a2h_args)
+
+
 def main() -> None:
     """Install qutebrowser in a virtualenv.."""
     args = parse_args()
@@ -193,11 +231,15 @@ def main() -> None:
     if args.tox_error:
         show_tox_error(args.pyqt_type)
         sys.exit(1)
+    elif args.pyqt_type == 'link' and args.pyqt_version != 'auto':
+        utils.print_col('The --pyqt-version option is not available when '
+                        'linking a system-wide install.', 'red')
+        sys.exit(1)
 
     if not args.keep:
         utils.print_title("Creating virtual environment")
         delete_old_venv(venv_dir)
-        create_venv(venv_dir)
+        create_venv(venv_dir, use_virtualenv=args.virtualenv)
 
     upgrade_pip(venv_dir)
 
@@ -212,6 +254,7 @@ def main() -> None:
 
     install_requirements(venv_dir)
     install_qutebrowser(venv_dir)
+    regenerate_docs(venv_dir, args.asciidoc)
 
 
 if __name__ == '__main__':
