@@ -194,10 +194,10 @@ Feature: Yanking and pasting.
             http://qutebrowser.org
             should not open
         And I run :open -t {clipboard}
-        And I wait until data/hello.txt?q=this%20url%3A%0Ahttp%3A%2F%2Fqutebrowser.org%0Ashould%20not%20open is loaded
+        And I wait until data/hello.txt?q=this%20url%3A%0Ahttp%3A//qutebrowser.org%0Ashould%20not%20open is loaded
         Then the following tabs should be open:
             - about:blank
-            - data/hello.txt?q=this%20url%3A%0Ahttp%3A%2F%2Fqutebrowser.org%0Ashould%20not%20open (active)
+            - data/hello.txt?q=this%20url%3A%0Ahttp%3A//qutebrowser.org%0Ashould%20not%20open (active)
 
     Scenario: Pasting multiline whose first line looks like a URI
         When I set url.auto_search to naive
@@ -315,6 +315,7 @@ Feature: Yanking and pasting.
         And I run :insert-text This text should be undone
         And I wait for the javascript message "textarea contents: This text should be undone"
         And I press the key "<Ctrl+z>"
+        And I wait for the javascript message "textarea contents: "
         # Paste final text
         And I run :insert-text This text should stay
         # Compare

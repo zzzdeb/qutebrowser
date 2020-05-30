@@ -1053,7 +1053,10 @@ class CommandDispatcher:
     @cmdutils.argument('output_messages', flag='m')
     def spawn(self, cmdline, userscript=False, verbose=False,
               output=False, output_messages=False, detach=False, count=None):
-        """Spawn a command in a shell.
+        """Spawn an external command.
+
+        Note that the command is *not* run in a shell, so things like `$VAR` or
+        `> output` won't have the desired effect.
 
         Args:
             userscript: Run the command as a userscript. You can use an
@@ -1091,7 +1094,8 @@ class CommandDispatcher:
         if userscript:
             def _selection_callback(s):
                 try:
-                    runner = self._run_userscript(s, cmd, args, verbose, count)
+                    runner = self._run_userscript(
+                        s, cmd, args, verbose, output_messages, count)
                     runner.finished.connect(_on_proc_finished)
                 except cmdutils.CommandError as e:
                     message.error(str(e))
@@ -1117,13 +1121,15 @@ class CommandDispatcher:
                 proc.start(cmd, args)
             proc.finished.connect(_on_proc_finished)
 
-    def _run_userscript(self, selection, cmd, args, verbose, count):
+    def _run_userscript(self, selection, cmd, args, verbose, output_messages,
+                        count):
         """Run a userscript given as argument.
 
         Args:
             cmd: The userscript to run.
             args: Arguments to pass to the userscript.
             verbose: Show notifications when the command started/exited.
+            output_messages: Show the output as messages.
             count: Exposed to the userscript.
         """
         env = {
@@ -1150,7 +1156,8 @@ class CommandDispatcher:
 
         try:
             runner = userscripts.run_async(
-                tab, cmd, *args, win_id=self._win_id, env=env, verbose=verbose)
+                tab, cmd, *args, win_id=self._win_id, env=env, verbose=verbose,
+                output_messages=output_messages)
         except userscripts.Error as e:
             raise cmdutils.CommandError(e)
         return runner
@@ -1548,6 +1555,7 @@ class CommandDispatcher:
         options = {
             'ignore_case': config.val.search.ignore_case,
             'reverse': reverse,
+            'wrap': config.val.search.wrap,
         }
 
         self._tabbed_browser.search_text = text
