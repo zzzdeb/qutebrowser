@@ -583,6 +583,9 @@ class TabbedBrowser(QWidget):
         log.webview.debug("Creating new tab with URL {}, background {}, "
                           "related {}, idx {}".format(
                               url, background, related, idx))
+        if self.widget.currentWidget() != None and config.val.tabs.only_one:
+            self.widget.currentWidget().load_url(url)
+            return
 
         prev_focus = QApplication.focusWidget()
 
