@@ -1730,6 +1730,11 @@ tabs.tabs_are_windows:
   type: Bool
   desc: Open a new window for every tab.
 
+tabs.only_one:
+  default: false
+  type: Bool
+  desc: Open only one tab.
+
 tabs.title.alignment:
   default: left
   type: TextAlignment
